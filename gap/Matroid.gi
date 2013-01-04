@@ -16,7 +16,7 @@
 
 DeclareRepresentation( "IsAbstractMatroidRep",
 	IsMatroid and IsAttributeStoringRep,
-	[ "bases", "groundSet" ]
+	[]
 );
 
 DeclareRepresentation( "IsVectorMatroidRep",
@@ -82,15 +82,15 @@ BindGlobal( "TheTypeMinorOfVectorMatroid",
 ## DualMatroid
 
 InstallMethod( DualMatroid,
-		"for abstract matroids",
-		[ IsAbstractMatroidRep ],
+		"for matroids with bases",
+		[ IsAbstractMatroidRep and HasBases ],
 
  function( matroid )
   local dualbases, dual;
 
   dualbases := Set( List( Bases( matroid ), b -> Difference( GroundSet( matroid ), b ) ) );
 
-  dual := MatroidNC( GroundSet( matroid ), dualbases );
+  dual := MatroidByBasesNCL( GroundSet( matroid ), dualbases );
   SetDualMatroid( dual, matroid );
 
   return dual;
@@ -145,10 +145,10 @@ InstallMethod( SimplifiedMatroid,
 );
 
 
-#############
-## NormalForm
+############################
+## NormalFormOfVectorMatroid
 
-InstallMethod( NormalForm,
+InstallMethod( NormalFormOfVectorMatroid,
 		"for vector matroids",
 		[ IsVectorMatroidRep ],
 
@@ -159,6 +159,20 @@ InstallMethod( NormalForm,
   posOfNonUnitCols := Difference( GroundSet( matroid ), PositionOfFirstNonZeroEntryPerRow( nf ) );
 
   return [ CertainColumns( nf, posOfNonUnitCols ), posOfNonUnitCols ];
+ end
+
+);
+
+
+############
+## GroundSet
+
+InstallMethod( GroundSet,
+		"for matroids",
+		[ IsMatroid ],
+
+ function( matroid )
+  return [ 1 .. SizeOfGroundSet( matroid ) ];
  end
 
 );
@@ -192,8 +206,8 @@ InstallMethod( SizeOfGroundSet,
 ## Rank
 
 InstallMethod( RankOfMatroid,
-		"for abstract matroids",
-		[ IsAbstractMatroidRep ],
+		"for matroids with bases",
+		[ IsAbstractMatroidRep and HasBases ],
 
  function( matroid )
   return Size( Bases(matroid)[1] );
@@ -224,8 +238,8 @@ InstallMethod( Rank,
 ## Rank function
 
 InstallMethod( RankFunction,
-		"for abstract matroids",
-		[ IsAbstractMatroidRep ],
+		"for matroids with bases",
+		[ IsAbstractMatroidRep and HasBases ],
 
  function( matroid )
   return function( X )
@@ -284,6 +298,39 @@ InstallMethod( ClosureFunction,
 );
 
 
+#######################
+## IndependenceFunction
+
+InstallMethod( IndependenceFunction,
+		"for vector matroids",
+		[ IsVectorMatroidRep ],
+
+ function( matroid )
+  return
+	function( X )
+	 local nf, unitVecLabels, otherLabels, checkMat, unitVecsInX, nrCols;
+
+	 nf := NormalFormOfVectorMatroid( matroid );
+	 otherLabels := nf[2];
+	 unitVecLabels := Difference( GroundSet( matroid ), otherLabels );
+
+	 checkMat := CertainColumns( nf[1], List( Intersection2( X, otherLabels ), col -> Position( otherLabels, col ) ) );
+
+         nrCols := NrColumns( checkMat );
+         if nrCols = 0 then return true; fi;
+
+         unitVecsInX := Intersection2( X, unitVecLabels );
+         checkMat := CertainRows( checkMat, Difference( [ 1 .. NrRows( checkMat ) ], List( unitVecsInX, row -> Position( unitVecLabels, row ) ) ) );
+
+         if NrRows( checkMat ) < nrCols then return false; fi;
+
+         return ColumnRankOfMatrix( checkMat ) = nrCols;
+	end;
+ end
+
+);
+
+
 ########
 ## Bases
 
@@ -306,8 +353,8 @@ InstallMethod( Bases,				# THIS IS AN EXTREMELY NAIVE APPROACH
 		[ IsVectorMatroidRep ],
 
  function( matroid )
-  return Filtered( Combinations( [ 1 .. SizeOfGroundSet( matroid ) ], Rank( matroid ) ),
-		b -> RowRankOfMatrix( CertainColumns( MatrixOfVectorMatroid(matroid), b ) ) = Rank( matroid ) );
+  return Filtered( Combinations( [ 1 .. SizeOfGroundSet( matroid ) ], RankOfMatroid( matroid ) ),
+		b -> RowRankOfMatrix( CertainColumns( MatrixOfVectorMatroid(matroid), b ) ) = RankOfMatroid( matroid ) );
  end
 
 );
@@ -316,7 +363,7 @@ InstallMethod( Bases,				# THIS IS AN EXTREMELY NAIVE APPROACH
 ###########
 ## Circuits
 
-InstallMethod( Circuits,
+InstallMethod( Circuits,		## recursive exponential time method
 		"for matroids",
 		[ IsMatroid ],
 
@@ -328,7 +375,7 @@ InstallMethod( Circuits,
   if SizeOfGroundSet( matroid ) = 0 then return []; fi;
   if SizeOfGroundSet( matroid ) = 1 then return List( Loops( matroid ), i -> [i] ); fi;
 
-  if Rank( matroid ) = 0 then return List( GroundSet( matroid ), i -> [i] ); fi;
+  if RankOfMatroid( matroid ) = 0 then return List( GroundSet( matroid ), i -> [i] ); fi;
 
   loopsColoops := Union2( Loops( matroid ), Coloops( matroid ) );
 
@@ -358,6 +405,126 @@ InstallMethod( Circuits,
   od;
 
   return Union2( circs, List( Loops( matroid ), l -> [l] ) );
+ end
+
+);
+
+
+InstallMethod( Circuits,
+		"for uniform matroids",
+		[ IsMatroid and IsUniform ],
+		10,
+
+ function( matroid )
+
+  return Combinations( GroundSet( matroid ), RankOfMatroid( matroid ) + 1 );
+
+ end
+
+);
+
+
+InstallMethod( Circuits,		## incremental polynomial time method for vector matroids
+		"for vector matroids",
+		[ IsVectorMatroidRep ],
+
+ function( matroid )
+  local	nf, unitVecLabels, otherLabels, corank, rank, i, j, isIndependent, superSet, ReduceDependentSetToCircuit,
+	newCircuits, oldCircuits, union, intersection, currentCircuit, otherCircuit;
+
+# If matroid is uniform, call method for uniform matroids:
+
+  if not HasIsUniform( matroid ) and IsUniform( matroid ) then
+   return Circuits( matroid );
+  fi;
+
+# Local function to find a circuit contained in a given set:
+
+  ReduceDependentSetToCircuit := function( dependentSet )
+   local element, furtherReduction, reducedSet;
+
+   repeat
+
+    furtherReduction := false;
+    for element in dependentSet do
+ 
+     reducedSet := Difference( dependentSet, [ element ] );
+ 
+     if not isIndependent( reducedSet ) then			# smaller dependent set found, start over
+      dependentSet := reducedSet;
+      furtherReduction := true;
+      break;
+     fi;
+
+    od;	# for element in dependentSet
+
+   until not furtherReduction;
+
+   return dependentSet;
+  end;
+
+# Initialise variables:
+
+  nf := NormalFormOfVectorMatroid( matroid )[1];
+  otherLabels := NormalFormOfVectorMatroid( matroid )[2];
+  unitVecLabels := Difference( GroundSet( matroid ), otherLabels );
+
+  rank := RankOfMatroid( matroid );
+  corank := SizeOfGroundSet( matroid ) - rank;
+
+  isIndependent := IndependenceFunction( matroid );
+
+  newCircuits := [];
+  oldCircuits := [];
+
+# Compute fundamental circuits for basis corresponding to unit vectors in normal form:
+
+  for j in [ 1 .. corank ] do
+
+   currentCircuit := [];
+   for i in [ 1 .. rank ] do
+
+    if not IsZero( MatElm( nf, i, j ) ) then Add( currentCircuit, unitVecLabels[i] ); fi;
+
+   od;
+   AddSet( currentCircuit, otherLabels[j] );
+
+   newCircuits[j] := currentCircuit;
+
+  od;
+
+# Treat loops separately:
+
+  newCircuits := Filtered( newCircuits, circ -> Size(circ) > 1 );
+
+# Check circuit axiom on new circuits until no more new circuits are found:
+
+  while not IsEmpty( newCircuits ) do
+
+   currentCircuit := Remove( newCircuits );
+
+   for otherCircuit in oldCircuits do
+
+    union := Union2( currentCircuit, otherCircuit );
+    intersection := Intersection2( currentCircuit, otherCircuit );
+
+    for i in intersection do
+
+     superSet := Difference( union, [ i ] );
+
+     if not ForAny( newCircuits, circ -> IsSubset( superSet, circ ) ) and not ForAny( oldCircuits, circ -> IsSubset( superSet, circ ) ) then
+      Add( newCircuits, ReduceDependentSetToCircuit( superSet ) );
+     fi;
+
+    od; # for i in intersection
+
+   od; # for otherCircuit in oldCircuits
+
+   Add( oldCircuits, currentCircuit );
+
+  od; # while not IsEmpty( newCircuits )
+
+  return Union2( oldCircuits, List( Loops( matroid ), loop -> [ loop ] ) );
  end
 
 );
@@ -396,7 +563,7 @@ InstallMethod( Hyperplanes,
 
 InstallMethod( TuttePolynomial,
 		"for uniform matroids",
-		[ IsMatroid and HasIsUniform and IsUniform ],
+		[ IsMatroid and IsUniform ],
 		20,
 
  function( matroid )
@@ -412,10 +579,11 @@ InstallMethod( TuttePolynomial,
    SetIndeterminateName( FamilyObj(x), 2, "y" );
   fi;
 
-  return Sum( List( [ 0 .. k ], i -> Binomial( n, i ) * (x-1)^(k-i) ) ) + Sum( List( [ k+1 .. n ], i -> Binomial( n, i ) * (y-1)^(i-k) ) );
+  return Sum( [ 0 .. k ], i -> Binomial( n, i ) * (x-1)^(k-i) ) + Sum( [ k+1 .. n ], i -> Binomial( n, i ) * (y-1)^(i-k) );
  end
 
 );
+
 
 InstallMethod( TuttePolynomial,
 		"generic method for matroids",
@@ -453,6 +621,7 @@ InstallMethod( TuttePolynomial,
 
 );
 
+
 InstallMethod( TuttePolynomial,
 		"for vector matroids",
 		[ IsVectorMatroidRep ],
@@ -472,7 +641,7 @@ InstallMethod( TuttePolynomial,
   if IsUniform( matroid ) then
    k := RankOfMatroid( matroid );
    n := SizeOfGroundSet( matroid );
-   return Sum( List( [ 0 .. k ], i -> Binomial( n, i ) * (x-1)^(k-i) ) ) + Sum( List( [ k+1 .. n ], i -> Binomial( n, i ) * (y-1)^(i-k) ) );
+   return Sum( [ 0 .. k ], i -> Binomial( n, i ) * (x-1)^(k-i) ) + Sum( [ k+1 .. n ], i -> Binomial( n, i ) * (y-1)^(i-k) );
   fi;
 
 ##
@@ -520,9 +689,9 @@ InstallMethod( TuttePolynomial,
    cdim := NrColumns( mat );
 
    if rdim = 1 then
-    return x - 1 + Sum( List( [ 1 .. cdim + 1 ], j -> Binomial(cdim+1,j) * (y-1)^(j-1) ) );
+    return x - 1 + Sum( [ 1 .. cdim + 1 ], j -> Binomial(cdim+1,j) * (y-1)^(j-1) );
    elif cdim = 1 then
-    return y - 1 + Sum( List( [ 0 .. rdim ], j -> Binomial(rdim+1,j) * (x-1)^(rdim-j) ) );
+    return y - 1 + Sum( [ 0 .. rdim ], j -> Binomial(rdim+1,j) * (x-1)^(rdim-j) );
    elif rdim = 0 then
     return y^cdim;
    elif cdim = 0 then
@@ -561,7 +730,7 @@ InstallMethod( TuttePolynomial,
 
 # Prepare for recursion:
 
-  minorMat := NormalForm( matroid )[1];
+  minorMat := NormalFormOfVectorMatroid( matroid )[1];
   loopsColoops := Union2( Loops( matroid ), Coloops( matroid ) );
   minorMat := CertainRows( CertainColumns( minorMat, NonZeroColumns( minorMat ) ), NonZeroRows( minorMat ) );
 
@@ -616,8 +785,8 @@ InstallMethod( Loops,
 ## Coloops
 
 InstallMethod( Coloops,
-		"for abstract matroids",
-		[ IsAbstractMatroidRep ],
+		"for matroids with bases",
+		[ IsAbstractMatroidRep and HasBases ],
 
  function( matroid )
   local is, b;
@@ -639,12 +808,12 @@ InstallMethod( Coloops,
 
  function( matroid )
 
-  if HasNormalForm( matroid ) then
+  if HasNormalFormOfVectorMatroid( matroid ) then
 
-   if IsEmpty( NormalForm( matroid )[2] ) then
+   if IsEmpty( NormalFormOfVectorMatroid( matroid )[2] ) then
     return GroundSet( matroid );
    else
-    return List( ZeroRows( NormalForm( matroid )[1] ), i -> Difference( GroundSet( matroid ), NormalForm( matroid )[2] )[i] );
+    return List( ZeroRows( NormalFormOfVectorMatroid( matroid )[1] ), i -> Difference( GroundSet( matroid ), NormalFormOfVectorMatroid( matroid )[2] )[i] );
    fi;
 
   else
@@ -661,12 +830,24 @@ InstallMethod( Coloops,
 ####################
 ## AutomorphismGroup
 
+
+InstallMethod( AutomorphismGroup,
+		"for uniform matroids",
+		[ IsMatroid and IsUniform ],
+
+ function( matroid )
+  return SymmetricGroup( SizeOfGroundSet( matroid ) );
+ end
+
+);
+
+
 InstallMethod( AutomorphismGroup,
 		"for vector matroids",
 		[ IsVectorMatroidRep ],
 
  function( matroid )
-  local stuff;
+
  end
 
 );
@@ -686,7 +867,7 @@ InstallMethod( IsUniform,
 		[ IsMatroid ],
 
  function( matroid )
-  return Size( Bases( matroid ) ) = Binomial( SizeOfGroundSet( matroid ), Rank( matroid ) );
+  return Size( Bases( matroid ) ) = Binomial( SizeOfGroundSet( matroid ), RankOfMatroid( matroid ) );
  end
 
 );
@@ -700,11 +881,11 @@ InstallMethod( IsUniform,
  function( matroid )
   local mat, k, remainingCols;
 
-  k := Rank( matroid );
+  k := RankOfMatroid( matroid );
 
   if k = 0 or k = SizeOfGroundSet( matroid ) then return true; fi;
 
-  mat := NormalForm( matroid )[1];
+  mat := NormalFormOfVectorMatroid( matroid )[1];
   remainingCols := NrColumns( mat );
 
   if k = 1 then
@@ -786,34 +967,6 @@ InstallMethod( IsRegular,
 ##
 ####################################
 
-############
-## GroundSet
-
-InstallMethod( GroundSet,
-		"for abstract matroids",
-		[ IsAbstractMatroidRep ],
-
- function( matroid )
-  if IsBound( matroid!.groundSet ) then
-   return matroid!.groundSet;
-  else
-   Error( "this matroid does not seem to have a ground set, this shouldn't happen" );
-  fi;
- end
-
-);
-
-InstallMethod( GroundSet,
-		"for vector matroids",
-		[ IsVectorMatroidRep ],
-
- function( matroid )
-  return [ 1 .. SizeOfGroundSet(matroid) ];
- end
-
-);
-
-
 ########################
 ## MatrixOfVectorMatroid
 
@@ -851,8 +1004,8 @@ InstallOtherMethod( Minor,
 
 ##
 InstallMethod( Minor,
-		"for abstract matroids",
-		[ IsAbstractMatroidRep, IsList, IsList ],
+		"for matroids with bases",
+		[ IsAbstractMatroidRep and HasBases, IsList, IsList ],
 
  function( matroid, del, contr )
   local minorBases, t, sdel, scontr, minor, loopsColoops;
@@ -1035,122 +1188,6 @@ InstallMethod( Matroid,
 );
 
 
-##
-InstallMethod( Matroid,
-		"by size of ground set and list of bases or independent sets",
-		[ IsInt, IsList ],
-
- function( deg, indep  )
-  local gset, baselist, rk, sizelist, matroid;
-
-  if IsEmpty( indep ) then Error( "the list of independent sets must be non-empty" ); fi;
-
-  gset := Immutable([ 1 .. deg ]);
-
-  if ForAny( indep, i -> not IsSubset( gset, i ) ) then
-   Error( "elements of <indep> must be subsets of [1..<deg>]" );
-  fi;
-
-  sizelist := List( indep, i -> Size( Set( i ) ) );
-  rk := Maximum( sizelist );
-
-# Extract bases from indep list:
-  baselist := Immutable( List( Filtered( [ 1 .. Size( indep ) ], i -> sizelist[i] = rk ), i -> Set( indep[i] ) ) );
-
-# Check base exchange axiom:
-  if ForAny( baselist, b1 -> ForAny( baselist, b2 ->
-	ForAny( Difference(b1,b2), e -> ForAll( Difference(b2,b1), f ->
-		not Union2( Difference( b1, [e] ), [f] ) in baselist
-	) )
-  ) ) then Error( "bases must satisfy the exchange axiom" ); fi;
-
-  matroid := Objectify( TheTypeAbstractMatroid, rec( groundSet := gset, bases := baselist ) );
-  SetRankOfMatroid( matroid, rk );
-
-  __alcove_MatroidStandardImplications( matroid );
-
-  return matroid;
-
- end
-
-);
-
-
-##
-InstallMethod( Matroid,
-		"by size of ground set and list of bases",
-		[ IsInt, IsList ],
-
- function( deg, baselist  )
-  local matroid;
-
-  matroid := Objectify( TheTypeAbstractMatroid, rec( groundSet := Immutable([1..deg]), bases := Immutable(baselist) ) );
-
-  __alcove_MatroidStandardImplications( matroid );
-
-  return matroid;
- end
-
-);
-
-
-##
-InstallMethod( Matroid,
-		"by ground set and list of bases or independent sets",
-		[ IsList, IsList ],
-
- function( groundset, indep )
-  local matroid, sizelist, rk, baselist;
-
-  if IsEmpty( indep ) then Error( "the list of independent sets must be non-empty" ); fi;
-
-  if ForAny( indep, i -> not IsSubset( groundset, i ) ) then
-   Error( "elements of <indep> must be subsets of <groundset>" );
-  fi;
-
-  sizelist := List( indep, i -> Size( Set( i ) ) );
-  rk := Maximum( sizelist );
-
-# Extract bases from indep list:
-  baselist := Immutable( List( Filtered( [ 1 .. Size( indep ) ], i -> sizelist[i] = rk ), i -> Set( indep[i] ) ) );
-
-# Check base exchange axiom:
-  if ForAny( baselist, b1 -> ForAny( baselist, b2 ->
-	ForAny( Difference(b1,b2), e -> ForAll( Difference(b2,b1), f ->
-		not Union2( Difference( b1, [e] ), [f] ) in baselist
-	) )
-  ) ) then Error( "bases must satisfy the exchange axiom" ); fi;
-
-  matroid := Objectify( TheTypeAbstractMatroid, rec( groundSet := Immutable(groundset), bases := baselist ) );
-  SetRankOfMatroid( matroid, rk );
-
-  __alcove_MatroidStandardImplications( matroid );
-
-  return matroid;
-
- end
-
-);
-
-
-##
-InstallMethod( MatroidNC,
-		"by ground set and list of bases, no checks",
-		[ IsList, IsList ],
-
- function( groundset, baselist )
-  local matroid;
-
-  matroid := Objectify( TheTypeAbstractMatroid, rec( groundSet := Immutable(groundset), bases := Immutable(baselist) ) );
-  __alcove_MatroidStandardImplications( matroid );
-
-  return matroid;
- end
-
-);
-
-
-
 ###						# SORT OUT HOW TO GUESS THE BASE FIELD AS AN IsHomalgRing!
 #InstallMethod( Matroid,
 #		"by matrix",
@@ -1218,6 +1255,23 @@ InstallMethod( Matroid,
 
 
 ##
+InstallMethod( MatroidNL,
+		"by homalg matrix, no logical implications",
+		[ IsHomalgMatrix ],
+		30,
+
+ function( matobj )
+  local matroid;
+
+  matroid := Objectify( TheTypeVectorMatroid, rec( generatingMatrix := Immutable(matobj) ) );
+
+  return matroid;
+ end
+
+);
+
+
+##
 InstallMethod( Matroid,
 		"by homalg matrix",
 		[ IsHomalgMatrix ],
@@ -1237,36 +1291,146 @@ InstallMethod( Matroid,
 
 
 ##
-InstallMethod( RandomVectorMatroidOverFinitePrimeField,
-		"of certain dimensions over a prime field",
-		[ IsInt, IsInt, IsInt ],
+InstallMethod( MatroidByBases,
+		"by size of ground set and list of bases",
+		[ IsInt, IsList ],
 
- function( k, n, p )
-  if not IsPrimeInt(p) then Error( "<p> must be prime" ); fi;
-  return Matroid( HomalgMatrix( RandomMat( k, n, [ 1 .. p ] ), HomalgRingOfIntegers(p) ) );
+ function( deg, baselist  )
+  local matroid;
+
+  if IsEmpty( baselist ) then Error( "the list of bases must be non-empty" ); fi;
+
+  if ForAny( baselist, i -> not IsSubset( [1..deg], i ) ) then
+   Error( "elements of <baselist> must be subsets of [1..<deg>]" );
+  fi;
+
+# Check basis exchange axiom:
+  if ForAny( baselist, b1 -> ForAny( baselist, b2 ->
+	ForAny( Difference(b1,b2), e -> ForAll( Difference(b2,b1), f ->
+		not Union2( Difference( b1, [e] ), [f] ) in baselist
+	) )
+  ) ) then Error( "bases must satisfy the exchange axiom" ); fi;
+
+  matroid := Objectify( TheTypeAbstractMatroid, rec() );
+  SetBases( matroid, baselist );
+  SetSizeOfGroundSet( matroid, deg );
+
+  __alcove_MatroidStandardImplications( matroid );
+
+  return matroid;
+
+ end
+
+);
+
+##
+InstallMethod( MatroidByBasesNCL,
+		"by size of ground set and list of bases, no checks or logical implications",
+		[ IsInt, IsList ],
+
+ function( deg, baselist  )
+  local matroid;
+
+  matroid := Objectify( TheTypeAbstractMatroid, rec() );
+  SetBases( matroid, baselist );
+  SetSizeOfGroundSet( matroid, deg );
+
+  return matroid;
  end
 
 );
 
 
 ##
-InstallMethod( RandomVectorMatroidOverRationals,
-		"of certain dimensions over a prime field",
-		[ IsInt, IsInt ],
+InstallMethod( MatroidByBases,
+		"by ground set and list of bases",
+		[ IsList, IsList ],
 
- function( k, n )
-  return Matroid( HomalgMatrix( RandomMat( k, n, Rationals ), HomalgFieldOfRationals ) );
+ function( groundset, bases )
+  return MatroidByBases( Size( groundset ), List( bases, b -> List( b, e -> Position( groundset, e ) ) ) );
  end
 
 );
 
 
 ##
-InstallMethod( Matroid,
+InstallMethod( MatroidByBasesNCL,
+		"by ground set and list of bases, no checks or logical implications",
+		[ IsList, IsList ],
+
+ function( groundset, bases )
+  return MatroidByBasesNCL( Size( groundset ), List( bases, b -> List( b, e -> Position( groundset, e ) ) ) );
+ end
+
+);
+
+
+##
+InstallMethod( MatroidByIndependenceFunction,
+		"given size of ground set and boolean function deciding independence of subsets",
+		[ IsInt, IsFunction ],
+
+ function( size, isIndep )
+
+ end
+
+);
+
+
+##
+InstallMethod( MatroidByIndependenceFunctionNCL,
+		"given size of ground set and boolean function deciding independence of subsets, no checks or logical implications",
+		[ IsInt, IsFunction ],
+
+ function( size, isIndep )
+
+ end
+
+);
+
+
+##
+InstallMethod( MatroidByIndependenceFunction,
 		"given ground set and boolean function deciding independence of subsets",
 		[ IsList, IsFunction ],
 
- function( groundset, testindep )
+ function( groundSet, isIndep )
+
+ end
+
+);
+
+
+##
+InstallMethod( MatroidByIndependenceFunctionNCL,
+		"given ground set and boolean function deciding independence of subsets, no checks or logical implications",
+		[ IsList, IsFunction ],
+
+ function( groundSet, isIndep )
+
+ end
+
+);
+
+
+##
+InstallMethod( MatroidByCircuits,
+		"given size of ground set and list of circuits",
+		[ IsInt, IsList ],
+
+ function( size, circs )
+
+ end
+
+);
+
+
+##
+InstallMethod( MatroidByCircuitsNCL,
+		"given size of ground set and list of circuits no checks or logical implications",
+		[ IsInt, IsList ],
+
+ function( size, circs )
 
  end
 
@@ -1278,7 +1442,19 @@ InstallMethod( MatroidByCircuits,
 		"given ground set and list of circuits",
 		[ IsList, IsList ],
 
- function( groundset, circs )
+ function( groundSet, circs )
+
+ end
+
+);
+
+
+##
+InstallMethod( MatroidByCircuitsNCL,
+		"given ground set and list of circuits no checks or logical implications",
+		[ IsList, IsList ],
+
+ function( groundSet, circs )
 
  end
 
@@ -1287,10 +1463,10 @@ InstallMethod( MatroidByCircuits,
 
 ##
 InstallMethod( MatroidByRankFunction,
-		"given ground set and integer valued function",
-		[ IsList, IsFunction ],
+		"given size of ground set and integer valued function",
+		[ IsInt, IsFunction ],
 
- function( groundset, rank )
+ function( size, rankFunc )
 
  end
 
@@ -1298,11 +1474,69 @@ InstallMethod( MatroidByRankFunction,
 
 
 ##
-InstallMethod( MatroidOfGraph,
-		"given an incidence matrix",
-		[ IsMatrix ],
+InstallMethod( MatroidByRankFunctionNCL,
+		"given size of ground set and integer valued function, no checks or logical implications",
+		[ IsInt, IsFunction ],
 
- function( incidencemat )
+ function( size, rankFunc )
+
+ end
+
+);
+
+
+##
+InstallMethod( MatroidByRankFunction,
+		"given size of ground set and integer valued function",
+		[ IsList, IsFunction ],
+
+ function( groundSet, rankFunc )
+
+ end
+
+);
+
+
+##
+InstallMethod( MatroidByRankFunctionNCL,
+		"given size of ground set and integer valued function, no checks or logical implications",
+		[ IsList, IsFunction ],
+
+ function( groundSet, rankFunc )
+
+ end
+
+);
+
+
+###
+#InstallMethod( MatroidOfGraph,
+#		"given an incidence matrix",
+#		[ IsMatrix ],
+#
+# function( incidencemat )
+#
+# end
+#
+#);
+
+
+##
+InstallMethod( RandomVectorMatroidOverPrimeField,
+		"of certain dimensions over a prime field",
+		[ IsInt, IsInt, IsInt ],
+
+ function( k, n, p )
+
+  if not ( IsPrimeInt(p) or p = 0 ) or k < 0 or n < 0 then
+   Error( "usage: RandomVectorMatroidOverPrimeField( <rows>, <cols>, <char> )" );
+  fi;
+
+  if p = 0 then
+   return Matroid( HomalgMatrix( RandomMat( k, n, Rationals ), HomalgFieldOfRationals() ) );
+  else
+   return Matroid( HomalgMatrix( RandomMat( k, n, [ 1 .. p ] ), HomalgRingOfIntegers(p) ) );
+  fi;
 
  end
 
