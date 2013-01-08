@@ -30,8 +30,11 @@ DeclareAttribute( "ParentAttr",
 DeclareAttribute( "SimplifiedMatroid",
 		IsMatroid );
 
-DeclareAttribute( "NormalForm",
+DeclareAttribute( "NormalFormOfVectorMatroid",
 		IsMatroid );
+
+DeclareOperation( "GroundSet",
+		[ IsMatroid ] );
 
 DeclareAttribute( "SizeOfGroundSet",
 		IsMatroid );
@@ -43,6 +46,9 @@ DeclareAttribute( "RankFunction",
 		IsMatroid );
 
 DeclareAttribute( "ClosureFunction",
+		IsMatroid );
+
+DeclareAttribute( "IndependenceFunction",
 		IsMatroid );
 
 DeclareAttribute( "Bases",
@@ -98,9 +104,6 @@ DeclareProperty( "IsRegular",
 ##
 ####################################
 
-DeclareOperation( "GroundSet",
-		[ IsMatroid ] );
-
 DeclareOperation( "MatrixOfVectorMatroid",
 		[ IsMatroid ] );
 
@@ -122,23 +125,12 @@ DeclareOperation( "IsMinor",
 ##
 ####################################
 
+## Copy:
+
 DeclareOperation( "Matroid",
 		[ IsMatroid ] );
 
-DeclareOperation( "Matroid",
-		[ IsInt, IsList ] );
-
-DeclareOperation( "MatroidNC",
-		[ IsInt, IsList ] );
-
-DeclareOperation( "Matroid",
-		[ IsList, IsList ] );
-
-DeclareOperation( "MatroidNC",
-		[ IsList, IsList ] );
-
-#DeclareOperation( "Matroid",		# this declaration is implied by the next one
-#		[ IsMatrix ] );
+## Vector matroids:
 
 DeclareOperation( "Matroid",
 		[ IsGeneralizedRowVector and IsNearAdditiveElementWithInverse and IsAdditiveElement ] );
@@ -146,23 +138,62 @@ DeclareOperation( "Matroid",
 DeclareOperation( "Matroid",
 		[ IsMatrixObj ] );
 
-#DeclareOperation( "Matroid",		# implied by IsMatrixObj
-#		[ IsHomalgMatrix ] );
+DeclareOperation( "MatroidNL",
+		[ IsMatrixObj ] );
 
-DeclareOperation( "RandomVectorMatroidOverFinitePrimeField",
-		[ IsInt, IsInt, IsInt ] );
+## Abstract matroids:
 
-DeclareOperation( "RandomVectorMatroidOverRationals",
-		[ IsInt, IsInt ] );
+DeclareOperation( "MatroidByBases",
+		[ IsList, IsList ] );
 
-DeclareOperation( "Matroid",
+DeclareOperation( "MatroidByBasesNCL",
+		[ IsList, IsList ] );
+
+DeclareOperation( "MatroidByBases",
+		[ IsInt, IsList ] );
+
+DeclareOperation( "MatroidByBasesNCL",
+		[ IsInt, IsList ] );
+
+DeclareOperation( "MatroidByIndependenceFunction",
 		[ IsList, IsFunction ] );
+
+DeclareOperation( "MatroidByIndependenceFunctionNCL",
+		[ IsList, IsFunction ] );
+
+DeclareOperation( "MatroidByIndependenceFunction",
+		[ IsInt, IsFunction ] );
+
+DeclareOperation( "MatroidByIndependenceFunctionNCL",
+		[ IsInt, IsFunction ] );
 
 DeclareOperation( "MatroidByCircuits",
 		[ IsList, IsList ] );
 
+DeclareOperation( "MatroidByCircuitsNCL",
+		[ IsList, IsList ] );
+
+DeclareOperation( "MatroidByCircuits",
+		[ IsInt, IsList ] );
+
+DeclareOperation( "MatroidByCircuitsNCL",
+		[ IsInt, IsList ] );
+
 DeclareOperation( "MatroidByRankFunction",
 		[ IsList, IsFunction ] );
 
-DeclareOperation( "MatroidOfGraph",
-		[ IsMatrix ] );
+DeclareOperation( "MatroidByRankFunctionNCL",
+		[ IsList, IsFunction ] );
+
+DeclareOperation( "MatroidByRankFunction",
+		[ IsInt, IsFunction ] );
+
+DeclareOperation( "MatroidByRankFunctionNCL",
+		[ IsInt, IsFunction ] );
+
+#DeclareOperation( "MatroidOfGraph",
+#		[ IsMatrix ] );
+
+DeclareOperation( "RandomVectorMatroidOverPrimeField",
+		[ IsInt, IsInt, IsInt ] );
+
