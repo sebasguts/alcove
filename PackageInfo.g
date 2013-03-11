@@ -6,16 +6,16 @@ PackageName := "alcove",
 Subtitle := "A package for algebraic combinatorics",
 
 Version :=  Maximum( [
-  "2012-12-20", ## Martin's version ## in case this package should ever be edited by more than one person
+  "2013-01-29", ## Martin's version ## in case this package should ever be edited by more than one person
 ] ),
 
 Date := ~.Version{[ 1 .. 10 ]},
 Date := Concatenation( ~.Date{[ 9, 10 ]}, ".", ~.Date{[ 6, 7 ]}, ".", ~.Date{[ 1 .. 4 ]} ),
 
-ArchiveURL := 
-          Concatenation( "http://wwwb.math.rwth-aachen.de/~leuner/gap/", ~.PackageName, "/", ~.PackageName, "-", ~.Version ),
-
-ArchiveFormats := ".tar.gz",
+#ArchiveURL := 
+#          Concatenation( "http://wwwb.math.rwth-aachen.de/~leuner/gap/", ~.PackageName, "/", ~.PackageName, "-", ~.Version ),
+#
+#ArchiveFormats := ".tar.gz",
 
 
 
@@ -53,22 +53,29 @@ Status := "dev",
 #                 "It is capable of communicating with the CAS polymake via the package PolymakeInterface",
 #                 " and also provides several methods by itself." ),
 
-#PackageWWWHome := "http://wwwb.math.rwth-aachen.de/~gutsche/gap_packages/Convex/",
-#               
-#PackageDoc := rec(
-#  BookName  := "alcove",
-#  ArchiveURLSubset := ["doc"],
-#  HTMLStart := "doc/chap0.html",
-#  PDFFile   := "doc/manual.pdf",
-#  SixFile   := "doc/manual.six",
-#  LongTitle := "alcove - Objects in Algebraic Combinatorics",
-#  Autoload  := false
-#),
+PackageWWWHome := "https://github.com/martin-leuner/alcove",
+
+PackageDoc := rec(
+  BookName  := "alcove",
+  ArchiveURLSubset := ["doc"],
+  HTMLStart := "doc/chap0.html",
+  PDFFile   := "doc/manual.pdf",
+  SixFile   := "doc/manual.six",
+  LongTitle := "alcove - Objects in Algebraic Combinatorics",
+  Autoload  := true
+),
 
 
 Dependencies := rec(
   GAP := ">=4.5",
-  NeededOtherPackages := [ [ "MatricesForHomalg", ">=0" ], [ "RingsForHomalg", ">=0" ], [ "GaussForHomalg", ">=0" ], [ "ToolsForHomalg", ">=2012.12.01" ] ],
+  NeededOtherPackages := [
+	 [ "MatricesForHomalg", ">=2012.10.25" ],
+	 [ "RingsForHomalg", ">=2012.10.22" ],
+	 [ "GaussForHomalg", ">=2012.10.22" ],
+	 [ "ToolsForHomalg", ">=2012.12.01" ],
+	 [ "GAPDoc", ">= 1.0" ],
+	 [ "AutoDoc", ">=2012.07.29" ]
+	],
   SuggestedOtherPackages := [],
   ExternalConditions := []
                       
@@ -78,7 +85,7 @@ AvailabilityTest := ReturnTrue,
     
 Autoload := false,
 
-Keywords := [ "Algebraic combinatorics", "Matroid", "Association scheme", "Tutte polynomial", "C-algebra" ]
+Keywords := [ "Algebraic combinatorics", "Matroid", "Association scheme", "Tutte polynomial" ]
 
 ));
 

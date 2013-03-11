@@ -2,7 +2,7 @@
 ###################
 ## Standard implications for ALL matroids:
 
-InstallGlobalFunction( __alcove_MatroidStandardImplications,
+InstallGlobalFunction( _alcove_MatroidStandardImplications,
 			[ IsMatroid ],
 
  function( matroid )
@@ -100,6 +100,52 @@ InstallGlobalFunction( __alcove_MatroidStandardImplications,
 					[ SymmetricGroup, SizeOfGroundSet( matroid ) ] );
 
   SetDescriptionOfImplication( entry, "the automorphism group of U_{k,n} is S_n" );
+  AddToToDoList( entry );
+
+##
+# Connectedness:
+
+  entry := ToDoListEntryWithPointers( matroid, "IsUniform", true,
+					matroid,
+					"IsConnected",
+					function() return
+						SizeOfGroundSet( matroid ) <= 1
+						or
+						(
+							0 < RankOfMatroid( matroid )
+							and
+							RankOfMatroid( matroid ) < SizeOfGroundSet( matroid )
+						);
+					end );
+
+  SetDescriptionOfImplication( entry, "U_{k,n} is connected if and only if 1 < k < n" );
+  AddToToDoList( entry );
+
+ end
+
+);
+
+
+###################
+## Standard implications for vector matroids:
+
+InstallGlobalFunction( _alcove_VectorMatroidImplications,
+			[ IsMatroid ],
+
+ function( matroid )
+  local entry;
+
+##
+# If normal form is computed, set rank:
+
+  entry := ToDoListEntryWithListOfSources( [ [ matroid, "NormalFormOfVectorMatroid" ] ],
+					matroid,
+					"RankOfMatroid",
+					function() return
+						NrRows( NormalFormOfVectorMatroid( matroid )[1] );
+					end );
+
+  SetDescriptionOfImplication( entry, "the normal form determines the rank" );
   AddToToDoList( entry );
 
  end
