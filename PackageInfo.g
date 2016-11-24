@@ -83,6 +83,7 @@ Dependencies := rec(
       ],
   SuggestedOtherPackages := [
          [ "RingsForHomalg", ">=2012.10.22" ],
+         [ "PolymakeInterface", ">=2016.11.24" ]
       ],
   ExternalConditions := [ ]
 
